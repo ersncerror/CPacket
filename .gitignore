@@ -1,0 +1,7 @@
+# ignore rbxl files and it's lock file
+*.rbxl
+*.md
+CPacket.rbxl.lock
+
+# ignore settings
+.vscode/
