@@ -2,7 +2,8 @@
 很酷的网络远程库！
 
 >[!NOTE]
->本库更多~抄袭~借鉴的是 Suphi 的 Packet 网络库，感兴趣可以[点这里](https://devforum.roblox.com/t/packet-networking-library/3573907)看看
+>本库更多~抄袭~借鉴的是 Suphi 的 Packet 网络库，感兴趣可以[点这里](https://devforum.roblox.com/t/packet-networking-library/3573907)看看\
+>此库为个人练习，欢迎指正我的问题和使用我编写的库。
 >>（他的教程也很不错！各位Roblox脚本师有兴趣可以去看看。）
 
 ## ℹ️ 介绍
