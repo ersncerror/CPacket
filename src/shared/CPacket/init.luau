@@ -12,15 +12,15 @@ local RemoteEvent: RemoteEvent
 local Remotes = {}
 local Queue = {}
 
-local Library = {}
-Library.__index = Library
+local Classes = {}
+Classes.__index = Classes
 
 ------------------------
 -- [ Private Functions ]
 ------------------------
 
 local function ProcessRemoteFire()
-	if os.clock() - LastRemoteHandle < RemoteLimit then
+	if RemoteLimit <= 0 or os.clock() - LastRemoteHandle < RemoteLimit then
 		return
 	end
 
@@ -74,7 +74,7 @@ end
 ------------------------
 
 -- Constructor
-function Library.new(RemoteName: string)
+function Classes.new(RemoteName: string)
 	local Remote = Remotes[RemoteName]
 
 	if Remote then
@@ -106,20 +106,20 @@ function Library.new(RemoteName: string)
 
 	Remotes[RemoteName] = Remote
 
-	return setmetatable(Remote, Library) :: BaseRemote
+	return setmetatable(Remote, Classes) :: BaseRemote
 end
 
 -- Fire remote to all clients or server, based on the side who called this method.
 -- If you called this method on client, this will fire to the server.
 -- Else this will fire to all clients.
-function Library:Fire(...)
+function Classes:Fire(...)
 	Queue[self.Id] = Queue[self.Id] or {}
 
 	table.insert(Queue[self.Id], { ... })
 end
 
 -- Fire remote to a client, server side only.
-function Library:FireClient(player: Player, ...)
+function Classes:FireClient(player: Player, ...)
 	if not RunService:IsServer() then
 		error("You can't use FireClient on client.")
 	end
@@ -143,6 +143,7 @@ if RunService:IsServer() then
 
 	RemoteEvent.OnServerEvent:Connect(function(Player, Package)
 		debug.profilebegin("Unpack client remote")
+
 		for RemoteName, ListOfRemotes in Package do
 			for _, Parameters in ListOfRemotes do
 				if not Remotes[RemoteName] then
@@ -153,6 +154,7 @@ if RunService:IsServer() then
 				Remotes[RemoteName].OnServerEvent:Fire(table.unpack(Parameters))
 			end
 		end
+
 		debug.profileend()
 	end)
 elseif RunService:IsClient() then
@@ -160,6 +162,7 @@ elseif RunService:IsClient() then
 
 	RemoteEvent.OnClientEvent:Connect(function(Package)
 		debug.profilebegin("Unpack server remote")
+
 		for RemoteName, ListOfRemotes in Package do
 			for _, Parameters in ListOfRemotes do
 				if not Remotes[RemoteName] then
@@ -170,6 +173,7 @@ elseif RunService:IsClient() then
 				Remotes[RemoteName].OnServerEvent:Fire(table.unpack(Parameters))
 			end
 		end
+
 		debug.profileend()
 	end)
 end
@@ -195,4 +199,4 @@ export type BaseRemote<T...> = {
 	OnClientEvent: Signal.Signal?,
 }
 
-return Library
+return Classes

@@ -7,5 +7,5 @@ local CPacket = require(ReplicatedStorage.Shared.CPacket)
 local Remote = CPacket.new("TestRemote")
 
 Remote.OnServerEvent:Connect(function(...)
-    print(...)
+   print(...)
 end)
