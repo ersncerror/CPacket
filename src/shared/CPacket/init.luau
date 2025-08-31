@@ -1,8 +1,8 @@
 local RunService = game:GetService("RunService")
 
-local Signal = require(script.Packages.Signal)
+local Signal = require(script.Classes.Signal)
 
-local RemoteLimit = 1
+local RemoteLimit = 0
 local LastRemoteHandle = 0
 
 local RemoteCounter = 0
@@ -82,7 +82,7 @@ function Library.new(RemoteName: string)
 	end
 
 	Remote = {
-		Name = RemoteName
+		Name = RemoteName,
 	}
 
 	if RunService:IsServer() then
@@ -142,36 +142,26 @@ if RunService:IsServer() then
 	RemoteEvent.Parent = script
 
 	RemoteEvent.OnServerEvent:Connect(function(Player, Package)
-
 		debug.profilebegin("Unpack client remote")
 		for RemoteName, ListOfRemotes in Package do
-			
 			for _, Parameters in ListOfRemotes do
-
 				if not Remotes[RemoteName] then
 					warn(`{Player.Name} fired a remote ({RemoteName}) that is not found. This remote has been dropped.`)
 					return
 				end
 
 				Remotes[RemoteName].OnServerEvent:Fire(table.unpack(Parameters))
-
 			end
-
 		end
 		debug.profileend()
-
 	end)
-
 elseif RunService:IsClient() then
 	RemoteEvent = script:WaitForChild("RemoteEvent")
 
 	RemoteEvent.OnClientEvent:Connect(function(Package)
-
 		debug.profilebegin("Unpack server remote")
 		for RemoteName, ListOfRemotes in Package do
-
 			for _, Parameters in ListOfRemotes do
-
 				if not Remotes[RemoteName] then
 					warn(`Remote {RemoteName} was not found.`)
 					return

@@ -3,6 +3,6 @@ local CPacket = require(ReplicatedStorage.Shared.CPacket)
 
 local Remote = CPacket.new("TestRemote")
 
-Remote.OnClientEvent:Connect(function()
-    
-end)
+while task.wait(1) do
+	Remote:Fire("Hello World! From Client!")
+end
