@@ -2,15 +2,14 @@ local RunService = game:GetService("RunService")
 
 local Signal = require(script.Classes.Signal)
 
-local RemoteLimit = 0
-local LastRemoteHandle = 0
-
 local RemoteCounter = 0
 
 local RemoteEvent: RemoteEvent
 
 local Remotes = {}
 local Queue = {}
+
+local PlayerQueues
 
 local Classes = {}
 Classes.__index = Classes
@@ -19,50 +18,34 @@ Classes.__index = Classes
 -- [ Private Functions ]
 ------------------------
 
-local function ProcessRemoteFire()
-	if RemoteLimit <= 0 or os.clock() - LastRemoteHandle < RemoteLimit then
-		return
-	end
+local function OnServerReceived(Player: Player, Package: { any })
+	debug.profilebegin("Unpack client remote")
 
-	LastRemoteHandle = os.clock()
-
-	local ToAll = {}
-	local ToClient = {}
-
-	debug.profilebegin("Process Remote Fire")
-
-	for RemoteName, ListOfRemotes in Queue do
-		for Index, Remote: RemoteData in ListOfRemotes do
-			if Remote.Player then
-				ToClient[Remote.Player] = ToClient[Remote.Player] or {}
-				ToClient[Remote.Player][RemoteName] = ToClient[Remote.Player][RemoteName] or {}
-
-				table.insert(ToClient[Remote.Player][RemoteName], Remote.Parameters)
-			else
-				ToAll[RemoteName] = ToAll[RemoteName] or {}
-
-				table.insert(ToAll[RemoteName], Remote)
+	for RemoteName, ListOfRemotes in Package do
+		for _, Parameters in ListOfRemotes do
+			if not Remotes[RemoteName] then
+				warn(`{Player.Name} fired a remote ({RemoteName}) that is not found. This remote has been dropped.`)
+				return
 			end
 
-			ListOfRemotes[Index] = nil
+			Remotes[RemoteName].OnServerEvent:Fire(table.unpack(Parameters))
 		end
-
-		Queue[RemoteName] = nil
 	end
 
-	if RunService:IsServer() then
-		if next(ToAll) then
-			RemoteEvent:FireAllClients(ToAll)
-		end
+	debug.profileend()
+end
 
-		if next(ToClient) then
-			for Player, Packages in ToClient do
-				RemoteEvent:FireClient(Player, Packages)
+local function OnClientReceived(Package: { any })
+	debug.profilebegin("Unpack server remote")
+
+	for RemoteName, ListOfRemotes in Package do
+		for _, Parameters in ListOfRemotes do
+			if not Remotes[RemoteName] then
+				warn(`Remote {RemoteName} was not found.`)
+				return
 			end
-		end
-	else
-		if next(ToAll) then
-			RemoteEvent:FireServer(ToAll)
+
+			Remotes[RemoteName].OnClientEvent:Fire(table.unpack(Parameters))
 		end
 	end
 
@@ -73,7 +56,7 @@ end
 -- [ Public Functions ]
 ------------------------
 
--- Constructor
+-- 创建一个新远程。
 function Classes.new(RemoteName: string)
 	local Remote = Remotes[RemoteName]
 
@@ -83,13 +66,14 @@ function Classes.new(RemoteName: string)
 
 	Remote = {
 		Name = RemoteName,
+		Type = "Event",
 	}
 
 	if RunService:IsServer() then
 		local ThisRemoteId = tostring(RemoteCounter)
 
 		Remote.Id = ThisRemoteId
-		Remote.OnServerEvent = Signal.new() :: Signal.Signal
+		Remote.OnServerEvent = Signal.new()
 
 		Remotes[ThisRemoteId] = Remote
 		RemoteEvent:SetAttribute(RemoteName, ThisRemoteId)
@@ -97,7 +81,7 @@ function Classes.new(RemoteName: string)
 		RemoteCounter += 1
 	else
 		Remote.Id = RemoteEvent:GetAttribute(RemoteName)
-		Remote.OnClientEvent = Signal.new() :: Signal.Signal
+		Remote.OnClientEvent = Signal.new()
 
 		if Remote.Id then
 			Remotes[Remote.Id] = Remote
@@ -109,16 +93,16 @@ function Classes.new(RemoteName: string)
 	return setmetatable(Remote, Classes) :: BaseRemote
 end
 
--- Fire remote to all clients or server, based on the side who called this method.
--- If you called this method on client, this will fire to the server.
--- Else this will fire to all clients.
+-- 向所有客户端或服务器发送远程，这取决于你在哪端上调用了此函数。
+-- 若你在客户端上调用了此函数，那么将会向服务器发送远程。
+-- 服务器则是向所有客户端发送远程。
 function Classes:Fire(...)
 	Queue[self.Id] = Queue[self.Id] or {}
 
 	table.insert(Queue[self.Id], { ... })
 end
 
--- Fire remote to a client, server side only.
+-- 向客户端发送远程，仅限服务器。
 function Classes:FireClient(player: Player, ...)
 	if not RunService:IsServer() then
 		error("You can't use FireClient on client.")
@@ -128,9 +112,27 @@ function Classes:FireClient(player: Player, ...)
 		return
 	end
 
-	Queue[self.Id] = Queue[self.Id] or {}
+	PlayerQueues[player] = PlayerQueues[player] or {}
+	PlayerQueues[player][self.Id] = PlayerQueues[player][self.Id] or {}
 
-	table.insert(Queue[self.Id], { Player = player, Parameters = { ... } })
+	table.insert(PlayerQueues[player][self.Id], { ... })
+end
+
+-- 更改远程类型至RemoteFunction
+function Classes:ChangeToResponse()
+	if self.Type == "Response" then
+		return
+	end
+
+	self.Type = "Response"
+
+	if RunService:IsServer() then
+		self.OnServerEvent = nil
+		self.OnServerInvoke = false
+	else
+		self.OnClientEvent = nil
+		self.OnClientInvoke = false
+	end
 end
 
 ------------------------
@@ -138,47 +140,41 @@ end
 ------------------------
 
 if RunService:IsServer() then
+	PlayerQueues = {}
+
 	RemoteEvent = Instance.new("RemoteEvent")
 	RemoteEvent.Parent = script
 
-	RemoteEvent.OnServerEvent:Connect(function(Player, Package)
-		debug.profilebegin("Unpack client remote")
+	RemoteEvent.OnServerEvent:Connect(OnServerReceived)
 
-		for RemoteName, ListOfRemotes in Package do
-			for _, Parameters in ListOfRemotes do
-				if not Remotes[RemoteName] then
-					warn(`{Player.Name} fired a remote ({RemoteName}) that is not found. This remote has been dropped.`)
-					return
-				end
-
-				Remotes[RemoteName].OnServerEvent:Fire(table.unpack(Parameters))
+	RunService.Heartbeat:Connect(function()
+		if next(PlayerQueues) then
+			for player: Player, remotes in PlayerQueues do
+				RemoteEvent:FireClient(player, remotes)
 			end
+
+			table.clear(PlayerQueues)
 		end
 
-		debug.profileend()
+		if next(Queue) then
+			RemoteEvent:FireAllClients(Queue)
+
+			table.clear(Queue)
+		end
 	end)
 elseif RunService:IsClient() then
 	RemoteEvent = script:WaitForChild("RemoteEvent")
 
-	RemoteEvent.OnClientEvent:Connect(function(Package)
-		debug.profilebegin("Unpack server remote")
+	RemoteEvent.OnClientEvent:Connect(OnClientReceived)
 
-		for RemoteName, ListOfRemotes in Package do
-			for _, Parameters in ListOfRemotes do
-				if not Remotes[RemoteName] then
-					warn(`Remote {RemoteName} was not found.`)
-					return
-				end
+	RunService.Heartbeat:Connect(function()
+		if next(Queue) then
+			RemoteEvent:FireServer(Queue)
 
-				Remotes[RemoteName].OnServerEvent:Fire(table.unpack(Parameters))
-			end
+			table.clear(Queue)
 		end
-
-		debug.profileend()
 	end)
 end
-
-RunService.Heartbeat:Connect(ProcessRemoteFire)
 
 export type RemoteData = {
 	Parameters: { any },

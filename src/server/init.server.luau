@@ -9,3 +9,7 @@ local Remote = CPacket.new("TestRemote")
 Remote.OnServerEvent:Connect(function(...)
    print(...)
 end)
+
+while task.wait(1) do
+	Remote:Fire("Hello World! From Server!")
+end
